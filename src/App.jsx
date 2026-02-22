@@ -13,32 +13,40 @@ const firebaseConfig = {
   measurementId: "G-WE42ZVJJNV"
 };
 
-// Allumage du moteur Cloud
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const translations = {
   en: {
-    title: "🍼 PumPum", subtitle: "Bb we love you, you are the best! 💖", manualBtn: "✍️ Manual Entry",
+    title: "🍼 PumPum", subtitle: "Bb we love you, you are the Best! 💖", manualBtn: "✍️ Manual Entry",
     left: "Left", both: "Both", right: "Right", start: "START", stop: "STOP",
-    chartTitle: "📊 Weekly Summary (mL)", victories: "🏆 Your victories", noSession: "No session yet",
+    chartTitle: "📊 Weekly Summary (mL)", victories: "🏆 Your victories", noSession: "No session yet. Your turn!",
     bravo: "Great job! 🎉", howMuch: "How much did you pump?", save: "Save", cancel: "Cancel",
     reminder: "🔔 Next pump reminder:", none: "None", manualDuration: "Manual",
-    langBtn: "🇫🇷 FR", stopwatch: "⏱️ Stopwatch", timer: "⏳ Timer", min: "min", when: "🗓️ When was it?"
+    langBtn: "🇫🇷 FR", stopwatch: "⏱️ Stopwatch", timer: "⏳ Timer", min: "min", when: "🗓️ When was it?",
+    loginTitle: "Welcome!", loginSub: "Enter your family code to access your diary", loginBtn: "Unlock",
+    loginPlaceholder: "Ex: Baby2026", logout: "🔒"
   },
   fr: {
-    title: "🍼 PumPum", subtitle: "Bb,je t'aime, Détends-toi, tu gères ! 💖", manualBtn: "✍️ Saisie Manuelle",
+    title: "🍼 PumPum", subtitle: "Détends-toi, tu gères ! 💖", manualBtn: "✍️ Saisie Manuelle",
     left: "Gauche", both: "Les deux", right: "Droite", start: "START", stop: "STOP",
     chartTitle: "📊 Résumé Hebdomadaire (mL)", victories: "🏆 Tes victoires", noSession: "Pas encore de session. À toi !",
     bravo: "Bravo ! 🎉", howMuch: "Combien as-tu récolté ?", save: "Sauvegarder", cancel: "Annuler",
     reminder: "🔔 Rappel prochain tirage :", none: "Non", manualDuration: "Manuel",
-    langBtn: "🇬🇧 EN", stopwatch: "⏱️ Chrono", timer: "⏳ Timer", min: "min", when: "🗓️ Quand était-ce ?"
+    langBtn: "🇬🇧 EN", stopwatch: "⏱️ Chrono", timer: "⏳ Timer", min: "min", when: "🗓️ Quand était-ce ?",
+    loginTitle: "Bienvenue !", loginSub: "Entrez votre code familial pour accéder au carnet", loginBtn: "Déverrouiller",
+    loginPlaceholder: "Ex: Bebe2026", logout: "🔒"
   }
 };
 
 export default function App() {
   const [lang, setLang] = useState('en');
   const t = translations[lang];
+
+  // SYSTÈME DE SÉCURITÉ (Code Familial)
+  const [userCode, setUserCode] = useState(localStorage.getItem('pumpum_user') || '');
+  const [isLogged, setIsLogged] = useState(!!localStorage.getItem('pumpum_user'));
+  const [tempCode, setTempCode] = useState('');
 
   const [isPumping, setIsPumping] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -55,12 +63,8 @@ export default function App() {
   const [manualDate, setManualDate] = useState('');
   const [manualTime, setManualTime] = useState('');
 
+  // Initialisation et Chargement des données
   useEffect(() => {
-    // Injecter Tailwind
-    const script = document.createElement('script');
-    script.src = "https://cdn.tailwindcss.com";
-    document.head.appendChild(script);
-
     const savedLang = localStorage.getItem('pumpum_lang');
     if (savedLang) setLang(savedLang);
 
@@ -68,38 +72,52 @@ export default function App() {
       Notification.requestPermission();
     }
 
-    // TÉLÉCHARGEMENT DEPUIS FIREBASE
-    const fetchHistory = async () => {
-      try {
-        const q = query(collection(db, "sessions"), orderBy("timestamp", "desc"));
-        const querySnapshot = await getDocs(q);
-        const cloudSessions = [];
-        querySnapshot.forEach((doc) => {
-          cloudSessions.push({ firebaseId: doc.id, ...doc.data() });
-        });
-        
-        if (cloudSessions.length > 0) {
+    // On ne télécharge les données que si l'utilisateur est connecté
+    if (isLogged && userCode) {
+      const fetchHistory = async () => {
+        try {
+          // On va chercher dans le dossier secret de cette famille
+          const q = query(collection(db, "users", userCode, "sessions"), orderBy("timestamp", "desc"));
+          const querySnapshot = await getDocs(q);
+          const cloudSessions = [];
+          querySnapshot.forEach((doc) => {
+            cloudSessions.push({ firebaseId: doc.id, ...doc.data() });
+          });
+          
           setHistory(cloudSessions);
           localStorage.setItem('pumpum_history', JSON.stringify(cloudSessions));
-        } else {
-          // Secours local si Firebase est vide
+        } catch (error) {
+          console.error("Erreur connexion Cloud", error);
           const saved = localStorage.getItem('pumpum_history');
           if (saved) setHistory(JSON.parse(saved));
         }
-      } catch (error) {
-        console.error("Erreur connexion Cloud, chargement local.", error);
-        const saved = localStorage.getItem('pumpum_history');
-        if (saved) setHistory(JSON.parse(saved));
-      }
-    };
-    
-    fetchHistory();
-  }, []);
+      };
+      fetchHistory();
+    }
+  }, [isLogged, userCode]);
 
   const toggleLang = () => {
     const newLang = lang === 'en' ? 'fr' : 'en';
     setLang(newLang);
     localStorage.setItem('pumpum_lang', newLang);
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (tempCode.trim().length >= 3) {
+      const cleanCode = tempCode.trim().toLowerCase();
+      setUserCode(cleanCode);
+      setIsLogged(true);
+      localStorage.setItem('pumpum_user', cleanCode);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLogged(false);
+    setUserCode('');
+    setHistory([]);
+    localStorage.removeItem('pumpum_user');
+    localStorage.removeItem('pumpum_history');
   };
 
   useEffect(() => {
@@ -145,7 +163,6 @@ export default function App() {
     if (!isPumping) setTimerTarget((prev) => Math.max(1, prev + amount));
   };
 
-  // SAUVEGARDE CLOUD + LOCALE
   const saveSession = async () => {
     let sessionDate = (isManualEntry && manualDate && manualTime) ? new Date(`${manualDate}T${manualTime}`) : new Date();
     const durationSaved = seconds > 0 && !isManualEntry ? formatTime(seconds, true) : t.manualDuration;
@@ -160,14 +177,13 @@ export default function App() {
       volume
     };
     
-    // Mise à jour immédiate de l'écran (Optimistic UI)
     const newHistory = [newSession, ...history].sort((a, b) => b.timestamp - a.timestamp);
     setHistory(newHistory);
     localStorage.setItem('pumpum_history', JSON.stringify(newHistory));
     
-    // Envoi silencieux vers Firebase (Le Cloud)
     try {
-      await addDoc(collection(db, "sessions"), newSession);
+      // Sauvegarde dans le dossier secret de l'utilisateur
+      await addDoc(collection(db, "users", userCode, "sessions"), newSession);
     } catch (error) {
       console.error("Erreur de sauvegarde Firebase", error);
     }
@@ -204,9 +220,43 @@ export default function App() {
     return days.map(day => ({ day, total: dailyTotals[day], height: Math.round((dailyTotals[day] / maxVolume) * 100) }));
   }, [history]);
 
+  // ÉCRAN DE CONNEXION (Si l'utilisateur n'a pas tapé le code)
+  if (!isLogged) {
+    return (
+      <div className="min-h-screen bg-orange-50 flex flex-col items-center justify-center p-6 font-sans text-slate-700 relative">
+        <button onClick={toggleLang} className="absolute top-6 right-6 font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm text-sm">{t.langBtn}</button>
+        <div className="bg-white p-8 rounded-3xl w-full max-w-sm text-center shadow-xl border border-rose-50">
+          <h1 className="text-4xl font-extrabold text-teal-400 mb-2">🍼 PumPum</h1>
+          <h2 className="text-xl font-bold text-slate-600 mb-2 mt-6">{t.loginTitle}</h2>
+          <p className="text-sm font-medium text-slate-400 mb-8">{t.loginSub}</p>
+          
+          <form onSubmit={handleLogin}>
+            <input 
+              type="password" 
+              value={tempCode} 
+              onChange={(e) => setTempCode(e.target.value)}
+              placeholder={t.loginPlaceholder}
+              className="w-full bg-orange-50 text-slate-700 font-bold p-4 rounded-2xl mb-6 text-center focus:outline-none focus:ring-2 focus:ring-rose-300"
+            />
+            <button type="submit" className="w-full py-4 bg-rose-300 text-white rounded-2xl font-extrabold text-lg shadow-md active:scale-95 transition-all">
+              {t.loginBtn}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ÉCRAN PRINCIPAL (Protégé)
   return (
     <div className="min-h-screen bg-orange-50 flex flex-col items-center py-6 px-4 font-sans text-slate-700 relative overflow-x-hidden">
-      <button onClick={toggleLang} className="absolute top-6 right-6 font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm text-sm">{t.langBtn}</button>
+      
+      {/* Boutons du haut (Langue + Déconnexion) */}
+      <div className="absolute top-6 right-4 flex gap-2">
+        <button onClick={handleLogout} className="font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm text-sm">{t.logout}</button>
+        <button onClick={toggleLang} className="font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm text-sm">{t.langBtn}</button>
+      </div>
+
       <div className="text-center mb-6 mt-4">
         <h1 className="text-5xl font-extrabold text-teal-400 mb-2 tracking-tight">{t.title}</h1>
         <p className="text-md font-medium text-slate-500">{t.subtitle}</p>
@@ -269,6 +319,7 @@ export default function App() {
         )}
       </div>
 
+      {/* Modale de Sauvegarde (Inchiffrée pour plus de clarté dans la réponse) */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white p-6 sm:p-8 rounded-[2rem] w-full max-w-sm text-center shadow-2xl border-4 border-rose-100 my-8">
