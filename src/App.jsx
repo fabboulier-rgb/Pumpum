@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 // Dictionnaire Bilingue
 const translations = {
   en: {
-    title: "🍼 PumPum", subtitle: "Relax, you got this! 💖",
+    title: "🍼 PumPum", subtitle: "Bb, We Love You, you are the best! 💖",
     manualBtn: "✍️ Manual Entry",
     left: "Left", both: "Both", right: "Right",
     start: "START", stop: "STOP",
@@ -18,7 +18,7 @@ const translations = {
     when: "🗓️ When was it?"
   },
   fr: {
-    title: "🍼 PumPum", subtitle: "Détends-toi, tu gères ! 💖",
+    title: "🍼 PumPum", subtitle: "BB, Je t'aime, Détends-toi, tu gères ! 💖",
     manualBtn: "✍️ Saisie Manuelle",
     left: "Gauche", both: "Les deux", right: "Droite",
     start: "START", stop: "STOP",
