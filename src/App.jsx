@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-// AJOUT : import de 'deleteDoc' pour la suppression
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, getDoc, deleteDoc } from 'firebase/firestore';
 
 // VOS CLÉS FIREBASE SECRÈTES
@@ -17,7 +16,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// VOS TRADUCTIONS MISES À JOUR + NOUVEAUX TEXTES (Delete/Darkmode)
 const translations = {
   en: {
     title: "🍼 PumPump", subtitle: "Moms, we Love You! You are the Best! 💖", manualBtn: "✍️ Manual Entry",
@@ -33,7 +31,7 @@ const translations = {
     statusModalAppr: "Your code is registered. Your data is securely backed up in the Cloud.",
     statusModalTemp: "This code is not in the approved database. Your data will only be saved locally on this phone. BE CAREFUL, IT MIGHT BE LOST.",
     stopMusic: "🔇 Stop music",
-    deleteConfirm: "Are you sure you want to delete this session? This cannot be undone.", themeBtn: "🌙"
+    deleteConfirm: "Are you sure you want to delete this session? This cannot be undone."
   },
   fr: {
     title: "🍼 PumPump", subtitle: "Mamans, on vous aime ! Vous êtes les meilleures! 💖", manualBtn: "✍️ Saisie Manuelle",
@@ -49,7 +47,7 @@ const translations = {
     statusModalAppr: "Votre code est enregistré. Vos données sont sauvegardées de manière sécurisée dans le Cloud.",
     statusModalTemp: "Ce code n'est pas dans la base approuvée. Vos données ne seront sauvegardées que localement sur ce téléphone.",
     stopMusic: "🔇 Arrêter la musique",
-    deleteConfirm: "Êtes-vous sûre de vouloir supprimer cette session ? C'est définitif.", themeBtn: "☀️"
+    deleteConfirm: "Êtes-vous sûre de vouloir supprimer cette session ? C'est définitif."
   }
 };
 
@@ -57,7 +55,6 @@ export default function App() {
   const [lang, setLang] = useState('en');
   const t = translations[lang];
 
-  // ÉTAT POUR LE DARK MODE
   const [darkMode, setDarkMode] = useState(false);
 
   const [userCode, setUserCode] = useState(localStorage.getItem('pumpum_user') || '');
@@ -84,12 +81,10 @@ export default function App() {
   const [manualDate, setManualDate] = useState('');
   const [manualTime, setManualTime] = useState('');
 
-  // Initialisation : Langue, Notifications et DARK MODE
   useEffect(() => {
     const savedLang = localStorage.getItem('pumpum_lang');
     if (savedLang) setLang(savedLang);
 
-    // Charger la préférence du mode sombre
     const savedTheme = localStorage.getItem('pumpum_theme');
     if (savedTheme === 'dark') {
       setDarkMode(true);
@@ -99,7 +94,7 @@ export default function App() {
     if ("Notification" in window && Notification.permission !== "granted") {
       Notification.requestPermission();
     }
-    // ... (Le reste du useEffect de chargement Firebase reste identique)
+
     const checkApprovalAndFetch = async () => {
       if (isLogged && userCode) {
         try {
@@ -119,11 +114,8 @@ export default function App() {
           } else {
             setIsApproved(false);
             const saved = localStorage.getItem(`pumpum_history_${userCode}`);
-            if (saved) {
-              setHistory(JSON.parse(saved));
-            } else {
-              setHistory([]); 
-            }
+            if (saved) setHistory(JSON.parse(saved));
+            else setHistory([]); 
           }
         } catch (error) {
           console.error("Erreur Cloud", error);
@@ -143,7 +135,6 @@ export default function App() {
     localStorage.setItem('pumpum_lang', newLang);
   };
 
-  // Bascule du Dark Mode
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
     if (!darkMode) {
@@ -181,15 +172,12 @@ export default function App() {
     }
   };
 
-  // FONCTION DE SUPPRESSION
   const handleDeleteSession = async (sessionId, firebaseId) => {
     if (window.confirm(t.deleteConfirm)) {
-      // 1. Mise à jour locale immédiate
       const updatedHistory = history.filter(session => session.id !== sessionId);
       setHistory(updatedHistory);
       localStorage.setItem(`pumpum_history_${userCode}`, JSON.stringify(updatedHistory));
 
-      // 2. Suppression Cloud si approuvé et si l'ID existe
       if (isApproved && firebaseId) {
         try {
           await deleteDoc(doc(db, "users", userCode, "sessions", firebaseId));
@@ -200,7 +188,6 @@ export default function App() {
     }
   };
 
-  // ... (Le reste des useEffects pour le timer reste identique)
   useEffect(() => {
     let interval;
     if (isPumping) {
@@ -308,11 +295,9 @@ export default function App() {
   }, [history]);
 
   if (!isLogged) {
-    // Écran de connexion avec support Dark Mode
     return (
       <div className="min-h-screen bg-orange-50 dark:bg-indigo-950 flex flex-col items-center justify-center p-6 font-sans text-slate-700 dark:text-slate-200 relative transition-colors duration-500">
         <div className="absolute top-6 right-6 flex gap-2">
-           <button onClick={toggleDarkMode} className="text-lg bg-white dark:bg-slate-800 px-2 py-1 rounded-full shadow-sm">{t.themeBtn}</button>
            <button onClick={toggleLang} className="font-bold text-slate-400 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1 rounded-full shadow-sm text-sm">{t.langBtn}</button>
         </div>
         <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl w-full max-w-sm text-center shadow-xl border border-rose-50 dark:border-slate-800">
@@ -323,12 +308,19 @@ export default function App() {
             <input type="password" value={tempCode} onChange={(e) => setTempCode(e.target.value)} placeholder={t.loginPlaceholder} className="w-full bg-orange-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold p-4 rounded-2xl mb-6 text-center focus:outline-none focus:ring-2 focus:ring-rose-300"/>
             <button type="submit" className="w-full py-4 bg-rose-300 hover:bg-rose-400 text-white rounded-2xl font-extrabold text-lg shadow-md active:scale-95 transition-all">{t.loginBtn}</button>
           </form>
+
+          {/* SÉLECTEUR JOUR/NUIT CENTRÉ EN BAS (Écran Login) */}
+          <div className="mt-8 flex justify-center w-full">
+            <div className="flex bg-orange-50 dark:bg-slate-800 p-1 rounded-full shadow-inner">
+              <button onClick={() => { if (darkMode) toggleDarkMode(); }} className={`px-4 py-2 rounded-full text-lg transition-all ${!darkMode ? 'bg-white shadow-sm' : 'opacity-40'}`}>☀️</button>
+              <button onClick={() => { if (!darkMode) toggleDarkMode(); }} className={`px-4 py-2 rounded-full text-lg transition-all ${darkMode ? 'bg-indigo-900 shadow-sm' : 'opacity-40'}`}>🌙</button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Écran principal avec support Dark Mode complet
   return (
     <div className={`min-h-screen bg-orange-50 dark:bg-indigo-950 flex flex-col items-center py-6 px-4 font-sans text-slate-700 dark:text-slate-200 relative overflow-x-hidden transition-colors duration-500`}>
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
@@ -341,7 +333,6 @@ export default function App() {
       </div>
 
       <div className="absolute top-6 right-4 flex gap-2">
-        <button onClick={toggleDarkMode} className="text-lg bg-white dark:bg-slate-800 px-2 py-1 rounded-full shadow-sm">{t.themeBtn}</button>
         <button onClick={handleLogout} className="font-bold text-slate-400 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1 rounded-full shadow-sm text-sm">{t.logout}</button>
         <button onClick={toggleLang} className="font-bold text-slate-400 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1 rounded-full shadow-sm text-sm">{t.langBtn}</button>
       </div>
@@ -394,7 +385,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm mb-10 border border-rose-50 dark:border-slate-800 transition-colors">
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm mb-6 border border-rose-50 dark:border-slate-800 transition-colors">
         <h2 className="text-lg font-bold text-teal-400 mb-4 flex items-center gap-2">{t.victories}</h2>
         {history.length === 0 ? ( <p className="text-slate-400 dark:text-slate-500 text-center text-sm font-medium">{t.noSession}</p> ) : (
           <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
@@ -403,7 +394,6 @@ export default function App() {
                 <div><p className="font-bold text-slate-700 dark:text-slate-200 text-lg">{session.volume} mL</p><p className="text-xs text-slate-400 dark:text-slate-400 font-medium">{session.dateStr} - {session.timeStr} • {t[session.side] || session.side}</p></div>
                 <div className="flex items-center gap-2">
                   <div className="font-mono text-rose-400 font-bold bg-white dark:bg-slate-700 px-3 py-1 rounded-full shadow-sm text-sm">{session.duration}</div>
-                  {/* BOUTON SUPPRIMER */}
                   <button onClick={() => handleDeleteSession(session.id, session.firebaseId)} className="p-2 text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                   </button>
@@ -412,6 +402,24 @@ export default function App() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* SÉLECTEUR JOUR/NUIT CENTRÉ EN BAS */}
+      <div className="mt-auto mb-6 flex justify-center w-full max-w-sm">
+        <div className="flex bg-white dark:bg-slate-900 p-1 rounded-full shadow-sm border border-rose-50 dark:border-slate-800">
+          <button 
+            onClick={() => { if (darkMode) toggleDarkMode(); }} 
+            className={`px-6 py-2 rounded-full text-xl transition-all ${!darkMode ? 'bg-orange-50 shadow-md' : 'opacity-40 hover:bg-slate-800'}`}
+          >
+            ☀️
+          </button>
+          <button 
+            onClick={() => { if (!darkMode) toggleDarkMode(); }} 
+            className={`px-6 py-2 rounded-full text-xl transition-all ${darkMode ? 'bg-indigo-900 shadow-md' : 'opacity-40 hover:bg-orange-50'}`}
+          >
+            🌙
+          </button>
+        </div>
       </div>
 
       {showStatusModal && (
@@ -462,4 +470,3 @@ export default function App() {
     </div>
   );
 }
- 
