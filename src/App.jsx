@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
 
 // VOS CLÉS FIREBASE SECRÈTES
 const firebaseConfig = {
@@ -18,14 +18,19 @@ const db = getFirestore(app);
 
 const translations = {
   en: {
-    title: "🍼 PumPum", subtitle: "Bb we love you, you are the Best! 💖", manualBtn: "✍️ Manual Entry",
+    title: "🍼 PumPum", subtitle: "Relax, you got this! 💖", manualBtn: "✍️ Manual Entry",
     left: "Left", both: "Both", right: "Right", start: "START", stop: "STOP",
     chartTitle: "📊 Weekly Summary (mL)", victories: "🏆 Your victories", noSession: "No session yet. Your turn!",
     bravo: "Great job! 🎉", howMuch: "How much did you pump?", save: "Save", cancel: "Cancel",
     reminder: "🔔 Next pump reminder:", none: "None", manualDuration: "Manual",
     langBtn: "🇫🇷 FR", stopwatch: "⏱️ Stopwatch", timer: "⏳ Timer", min: "min", when: "🗓️ When was it?",
     loginTitle: "Welcome!", loginSub: "Enter your family code to access your diary", loginBtn: "Unlock",
-    loginPlaceholder: "Ex: Baby2026", logout: "🔒"
+    loginPlaceholder: "Ex: Baby2026", logout: "🔒",
+    statusApproved: "Approved ✅", statusTemp: "Temporary ❗",
+    statusModalTitle: "Code Status",
+    statusModalAppr: "Your code is registered. Your data is securely backed up in the Cloud.",
+    statusModalTemp: "This code is not in the approved database. Your data will only be saved locally on this phone.",
+    stopMusic: "🔇 Stop music"
   },
   fr: {
     title: "🍼 PumPum", subtitle: "Détends-toi, tu gères ! 💖", manualBtn: "✍️ Saisie Manuelle",
@@ -35,7 +40,12 @@ const translations = {
     reminder: "🔔 Rappel prochain tirage :", none: "Non", manualDuration: "Manuel",
     langBtn: "🇬🇧 EN", stopwatch: "⏱️ Chrono", timer: "⏳ Timer", min: "min", when: "🗓️ Quand était-ce ?",
     loginTitle: "Bienvenue !", loginSub: "Entrez votre code familial pour accéder au carnet", loginBtn: "Déverrouiller",
-    loginPlaceholder: "Ex: Bebe2026", logout: "🔒"
+    loginPlaceholder: "Ex: lu1", logout: "🔒",
+    statusApproved: "Approuvé ✅", statusTemp: "Temporaire ❗",
+    statusModalTitle: "Statut du Code",
+    statusModalAppr: "Votre code est enregistré. Vos données sont sauvegardées de manière sécurisée dans le Cloud.",
+    statusModalTemp: "Ce code n'est pas dans la base approuvée. Vos données ne seront sauvegardées que localement sur ce téléphone.",
+    stopMusic: "🔇 Arrêter la musique"
   }
 };
 
@@ -43,10 +53,16 @@ export default function App() {
   const [lang, setLang] = useState('en');
   const t = translations[lang];
 
-  // SYSTÈME DE SÉCURITÉ (Code Familial)
+  // SYSTÈME DE SÉCURITÉ & STATUT
   const [userCode, setUserCode] = useState(localStorage.getItem('pumpum_user') || '');
   const [isLogged, setIsLogged] = useState(!!localStorage.getItem('pumpum_user'));
+  const [isApproved, setIsApproved] = useState(false);
   const [tempCode, setTempCode] = useState('');
+  const [showStatusModal, setShowStatusModal] = useState(false);
+
+  // MOTEUR AUDIO
+  const audioRef = useRef(null);
+  const [isPlayingMusic, setIsPlayingMusic] = useState(false);
 
   const [isPumping, setIsPumping] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -63,7 +79,7 @@ export default function App() {
   const [manualDate, setManualDate] = useState('');
   const [manualTime, setManualTime] = useState('');
 
-  // Initialisation et Chargement des données
+  // Vérification Firebase au lancement ou login
   useEffect(() => {
     const savedLang = localStorage.getItem('pumpum_lang');
     if (savedLang) setLang(savedLang);
@@ -72,28 +88,39 @@ export default function App() {
       Notification.requestPermission();
     }
 
-    // On ne télécharge les données que si l'utilisateur est connecté
-    if (isLogged && userCode) {
-      const fetchHistory = async () => {
+    const checkApprovalAndFetch = async () => {
+      if (isLogged && userCode) {
         try {
-          // On va chercher dans le dossier secret de cette famille
-          const q = query(collection(db, "users", userCode, "sessions"), orderBy("timestamp", "desc"));
-          const querySnapshot = await getDocs(q);
-          const cloudSessions = [];
-          querySnapshot.forEach((doc) => {
-            cloudSessions.push({ firebaseId: doc.id, ...doc.data() });
-          });
+          // 1. On vérifie si le code est dans la whitelist
+          const docRef = doc(db, "approved_families", userCode);
+          const docSnap = await getDoc(docRef);
           
-          setHistory(cloudSessions);
-          localStorage.setItem('pumpum_history', JSON.stringify(cloudSessions));
+          if (docSnap.exists()) {
+            setIsApproved(true);
+            // 2. Si approuvé, on télécharge l'historique Cloud
+            const q = query(collection(db, "users", userCode, "sessions"), orderBy("timestamp", "desc"));
+            const querySnapshot = await getDocs(q);
+            const cloudSessions = [];
+            querySnapshot.forEach((doc) => {
+              cloudSessions.push({ firebaseId: doc.id, ...doc.data() });
+            });
+            setHistory(cloudSessions);
+            localStorage.setItem('pumpum_history', JSON.stringify(cloudSessions));
+          } else {
+            // Non approuvé : on reste en local
+            setIsApproved(false);
+            const saved = localStorage.getItem('pumpum_history');
+            if (saved) setHistory(JSON.parse(saved));
+          }
         } catch (error) {
-          console.error("Erreur connexion Cloud", error);
+          console.error("Erreur Cloud", error);
+          setIsApproved(false);
           const saved = localStorage.getItem('pumpum_history');
           if (saved) setHistory(JSON.parse(saved));
         }
-      };
-      fetchHistory();
-    }
+      }
+    };
+    checkApprovalAndFetch();
   }, [isLogged, userCode]);
 
   const toggleLang = () => {
@@ -104,7 +131,7 @@ export default function App() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (tempCode.trim().length >= 3) {
+    if (tempCode.trim().length >= 2) {
       const cleanCode = tempCode.trim().toLowerCase();
       setUserCode(cleanCode);
       setIsLogged(true);
@@ -115,9 +142,18 @@ export default function App() {
   const handleLogout = () => {
     setIsLogged(false);
     setUserCode('');
+    setIsApproved(false);
     setHistory([]);
     localStorage.removeItem('pumpum_user');
-    localStorage.removeItem('pumpum_history');
+    // On garde l'historique local pour ne pas frustrer l'utilisateur non-approuvé
+  };
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setIsPlayingMusic(false);
+    }
   };
 
   useEffect(() => {
@@ -130,6 +166,11 @@ export default function App() {
             setIsPumping(false);
             setIsManualEntry(false);
             setShowModal(true);
+            // DÉCLENCHEMENT DE LA MUSIQUE
+            if (audioRef.current) {
+              audioRef.current.play().catch(e => console.log("Audio bloqué par le navigateur", e));
+              setIsPlayingMusic(true);
+            }
             return next;
           }
           return next;
@@ -164,6 +205,7 @@ export default function App() {
   };
 
   const saveSession = async () => {
+    stopAudio(); // Coupe la musique quand on sauvegarde
     let sessionDate = (isManualEntry && manualDate && manualTime) ? new Date(`${manualDate}T${manualTime}`) : new Date();
     const durationSaved = seconds > 0 && !isManualEntry ? formatTime(seconds, true) : t.manualDuration;
 
@@ -177,15 +219,18 @@ export default function App() {
       volume
     };
     
+    // Sauvegarde locale instantanée
     const newHistory = [newSession, ...history].sort((a, b) => b.timestamp - a.timestamp);
     setHistory(newHistory);
     localStorage.setItem('pumpum_history', JSON.stringify(newHistory));
     
-    try {
-      // Sauvegarde dans le dossier secret de l'utilisateur
-      await addDoc(collection(db, "users", userCode, "sessions"), newSession);
-    } catch (error) {
-      console.error("Erreur de sauvegarde Firebase", error);
+    // Sauvegarde Cloud UNIQUEMENT si approuvé
+    if (isApproved) {
+      try {
+        await addDoc(collection(db, "users", userCode, "sessions"), newSession);
+      } catch (error) {
+        console.error("Erreur de sauvegarde Firebase", error);
+      }
     }
     
     if (reminderHours > 0 && "Notification" in window && Notification.permission === "granted") {
@@ -220,7 +265,6 @@ export default function App() {
     return days.map(day => ({ day, total: dailyTotals[day], height: Math.round((dailyTotals[day] / maxVolume) * 100) }));
   }, [history]);
 
-  // ÉCRAN DE CONNEXION (Si l'utilisateur n'a pas tapé le code)
   if (!isLogged) {
     return (
       <div className="min-h-screen bg-orange-50 flex flex-col items-center justify-center p-6 font-sans text-slate-700 relative">
@@ -229,35 +273,38 @@ export default function App() {
           <h1 className="text-4xl font-extrabold text-teal-400 mb-2">🍼 PumPum</h1>
           <h2 className="text-xl font-bold text-slate-600 mb-2 mt-6">{t.loginTitle}</h2>
           <p className="text-sm font-medium text-slate-400 mb-8">{t.loginSub}</p>
-          
           <form onSubmit={handleLogin}>
-            <input 
-              type="password" 
-              value={tempCode} 
-              onChange={(e) => setTempCode(e.target.value)}
-              placeholder={t.loginPlaceholder}
-              className="w-full bg-orange-50 text-slate-700 font-bold p-4 rounded-2xl mb-6 text-center focus:outline-none focus:ring-2 focus:ring-rose-300"
-            />
-            <button type="submit" className="w-full py-4 bg-rose-300 text-white rounded-2xl font-extrabold text-lg shadow-md active:scale-95 transition-all">
-              {t.loginBtn}
-            </button>
+            <input type="password" value={tempCode} onChange={(e) => setTempCode(e.target.value)} placeholder={t.loginPlaceholder} className="w-full bg-orange-50 text-slate-700 font-bold p-4 rounded-2xl mb-6 text-center focus:outline-none focus:ring-2 focus:ring-rose-300"/>
+            <button type="submit" className="w-full py-4 bg-rose-300 text-white rounded-2xl font-extrabold text-lg shadow-md active:scale-95 transition-all">{t.loginBtn}</button>
           </form>
         </div>
       </div>
     );
   }
 
-  // ÉCRAN PRINCIPAL (Protégé)
   return (
     <div className="min-h-screen bg-orange-50 flex flex-col items-center py-6 px-4 font-sans text-slate-700 relative overflow-x-hidden">
       
-      {/* Boutons du haut (Langue + Déconnexion) */}
+      {/* BALISE AUDIO CACHÉE (Doux carillon libre de droits) */}
+      <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
+
+      {/* STATUT DU CODE FAMILLE (En haut à gauche) */}
+      <div className="absolute top-6 left-4">
+        <button 
+          onClick={() => setShowStatusModal(true)}
+          className={`flex items-center gap-1 font-bold px-3 py-1 rounded-full shadow-sm text-xs transition-all ${isApproved ? 'bg-teal-50 text-teal-600 border border-teal-200' : 'bg-orange-100 text-orange-600 border border-orange-200'}`}
+        >
+          <span className="uppercase opacity-70 mr-1">{userCode}</span>
+          {isApproved ? t.statusApproved : t.statusTemp}
+        </button>
+      </div>
+
       <div className="absolute top-6 right-4 flex gap-2">
         <button onClick={handleLogout} className="font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm text-sm">{t.logout}</button>
         <button onClick={toggleLang} className="font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm text-sm">{t.langBtn}</button>
       </div>
 
-      <div className="text-center mb-6 mt-4">
+      <div className="text-center mb-6 mt-8">
         <h1 className="text-5xl font-extrabold text-teal-400 mb-2 tracking-tight">{t.title}</h1>
         <p className="text-md font-medium text-slate-500">{t.subtitle}</p>
       </div>
@@ -319,11 +366,33 @@ export default function App() {
         )}
       </div>
 
-      {/* Modale de Sauvegarde (Inchiffrée pour plus de clarté dans la réponse) */}
+      {/* POP-UP EXPLICATIVE DU STATUT */}
+      {showStatusModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowStatusModal(false)}>
+          <div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4 text-teal-500">{t.statusModalTitle}</h3>
+            <div className={`p-4 rounded-2xl mb-6 ${isApproved ? 'bg-teal-50 text-teal-700' : 'bg-orange-50 text-orange-700'}`}>
+              <span className="text-3xl block mb-2">{isApproved ? '✅' : '❗'}</span>
+              <p className="font-medium text-sm">{isApproved ? t.statusModalAppr : t.statusModalTemp}</p>
+            </div>
+            <button onClick={() => setShowStatusModal(false)} className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold">OK</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE DE SAUVEGARDE DE FIN */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white p-6 sm:p-8 rounded-[2rem] w-full max-w-sm text-center shadow-2xl border-4 border-rose-100 my-8">
             <h2 className="text-3xl font-bold mb-2 text-teal-400">{t.bravo}</h2>
+            
+            {/* BOUTON D'ARRÊT DE LA MUSIQUE */}
+            {isPlayingMusic && (
+              <button onClick={stopAudio} className="mb-4 mx-auto flex items-center justify-center gap-2 bg-rose-100 text-rose-500 px-4 py-2 rounded-full text-sm font-bold animate-pulse hover:bg-rose-200">
+                {t.stopMusic}
+              </button>
+            )}
+
             {isManualEntry && (
               <div className="mb-6 bg-orange-50 p-4 rounded-2xl">
                 <p className="text-sm font-bold text-teal-400 mb-3">{t.when}</p>
@@ -345,10 +414,11 @@ export default function App() {
               </div>
             </div>
             <button onClick={saveSession} className="w-full bg-rose-300 text-white py-4 rounded-2xl font-bold text-xl shadow-lg shadow-rose-200 mb-3 active:scale-95 transition-all">{t.save}</button>
-            <button onClick={() => {setShowModal(false); setSeconds(0); setReminderHours(0); setIsManualEntry(false);}} className="text-slate-400 font-bold py-2 px-6 rounded-full hover:bg-slate-50">{t.cancel}</button>
+            <button onClick={() => {stopAudio(); setShowModal(false); setSeconds(0); setReminderHours(0); setIsManualEntry(false);}} className="text-slate-400 font-bold py-2 px-6 rounded-full hover:bg-slate-50">{t.cancel}</button>
           </div>
         </div>
       )}
     </div>
   );
 }
+ 
