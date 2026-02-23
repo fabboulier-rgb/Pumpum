@@ -79,7 +79,6 @@ export default function App() {
   const [manualDate, setManualDate] = useState('');
   const [manualTime, setManualTime] = useState('');
 
-  // Vérification Firebase au lancement ou login
   useEffect(() => {
     const savedLang = localStorage.getItem('pumpum_lang');
     if (savedLang) setLang(savedLang);
@@ -91,13 +90,11 @@ export default function App() {
     const checkApprovalAndFetch = async () => {
       if (isLogged && userCode) {
         try {
-          // 1. On vérifie si le code est dans la whitelist
           const docRef = doc(db, "approved_families", userCode);
           const docSnap = await getDoc(docRef);
           
           if (docSnap.exists()) {
             setIsApproved(true);
-            // 2. Si approuvé, on télécharge l'historique Cloud
             const q = query(collection(db, "users", userCode, "sessions"), orderBy("timestamp", "desc"));
             const querySnapshot = await getDocs(q);
             const cloudSessions = [];
@@ -105,18 +102,23 @@ export default function App() {
               cloudSessions.push({ firebaseId: doc.id, ...doc.data() });
             });
             setHistory(cloudSessions);
-            localStorage.setItem('pumpum_history', JSON.stringify(cloudSessions));
+            // Isolation du cache local par code utilisateur
+            localStorage.setItem(`pumpum_history_${userCode}`, JSON.stringify(cloudSessions));
           } else {
-            // Non approuvé : on reste en local
             setIsApproved(false);
-            const saved = localStorage.getItem('pumpum_history');
-            if (saved) setHistory(JSON.parse(saved));
+            const saved = localStorage.getItem(`pumpum_history_${userCode}`);
+            if (saved) {
+              setHistory(JSON.parse(saved));
+            } else {
+              setHistory([]); // Important : vide l'historique si le cache est vide
+            }
           }
         } catch (error) {
           console.error("Erreur Cloud", error);
           setIsApproved(false);
-          const saved = localStorage.getItem('pumpum_history');
+          const saved = localStorage.getItem(`pumpum_history_${userCode}`);
           if (saved) setHistory(JSON.parse(saved));
+          else setHistory([]);
         }
       }
     };
@@ -143,9 +145,8 @@ export default function App() {
     setIsLogged(false);
     setUserCode('');
     setIsApproved(false);
-    setHistory([]);
+    setHistory([]); // On nettoie l'écran immédiatement
     localStorage.removeItem('pumpum_user');
-    // On garde l'historique local pour ne pas frustrer l'utilisateur non-approuvé
   };
 
   const stopAudio = () => {
@@ -166,9 +167,8 @@ export default function App() {
             setIsPumping(false);
             setIsManualEntry(false);
             setShowModal(true);
-            // DÉCLENCHEMENT DE LA MUSIQUE
             if (audioRef.current) {
-              audioRef.current.play().catch(e => console.log("Audio bloqué par le navigateur", e));
+              audioRef.current.play().catch(e => console.log("Audio bloqué", e));
               setIsPlayingMusic(true);
             }
             return next;
@@ -205,7 +205,7 @@ export default function App() {
   };
 
   const saveSession = async () => {
-    stopAudio(); // Coupe la musique quand on sauvegarde
+    stopAudio(); 
     let sessionDate = (isManualEntry && manualDate && manualTime) ? new Date(`${manualDate}T${manualTime}`) : new Date();
     const durationSaved = seconds > 0 && !isManualEntry ? formatTime(seconds, true) : t.manualDuration;
 
@@ -219,17 +219,16 @@ export default function App() {
       volume
     };
     
-    // Sauvegarde locale instantanée
     const newHistory = [newSession, ...history].sort((a, b) => b.timestamp - a.timestamp);
     setHistory(newHistory);
-    localStorage.setItem('pumpum_history', JSON.stringify(newHistory));
+    // On sauvegarde dans le cache ISOLE de ce code utilisateur
+    localStorage.setItem(`pumpum_history_${userCode}`, JSON.stringify(newHistory));
     
-    // Sauvegarde Cloud UNIQUEMENT si approuvé
     if (isApproved) {
       try {
         await addDoc(collection(db, "users", userCode, "sessions"), newSession);
       } catch (error) {
-        console.error("Erreur de sauvegarde Firebase", error);
+        console.error("Erreur de sauvegarde", error);
       }
     }
     
@@ -284,16 +283,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-orange-50 flex flex-col items-center py-6 px-4 font-sans text-slate-700 relative overflow-x-hidden">
-      
-      {/* BALISE AUDIO CACHÉE (Doux carillon libre de droits) */}
       <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
 
-      {/* STATUT DU CODE FAMILLE (En haut à gauche) */}
       <div className="absolute top-6 left-4">
-        <button 
-          onClick={() => setShowStatusModal(true)}
-          className={`flex items-center gap-1 font-bold px-3 py-1 rounded-full shadow-sm text-xs transition-all ${isApproved ? 'bg-teal-50 text-teal-600 border border-teal-200' : 'bg-orange-100 text-orange-600 border border-orange-200'}`}
-        >
+        <button onClick={() => setShowStatusModal(true)} className={`flex items-center gap-1 font-bold px-3 py-1 rounded-full shadow-sm text-xs transition-all ${isApproved ? 'bg-teal-50 text-teal-600 border border-teal-200' : 'bg-orange-100 text-orange-600 border border-orange-200'}`}>
           <span className="uppercase opacity-70 mr-1">{userCode}</span>
           {isApproved ? t.statusApproved : t.statusTemp}
         </button>
@@ -366,7 +359,6 @@ export default function App() {
         )}
       </div>
 
-      {/* POP-UP EXPLICATIVE DU STATUT */}
       {showStatusModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowStatusModal(false)}>
           <div className="bg-white p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -380,19 +372,13 @@ export default function App() {
         </div>
       )}
 
-      {/* MODALE DE SAUVEGARDE DE FIN */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white p-6 sm:p-8 rounded-[2rem] w-full max-w-sm text-center shadow-2xl border-4 border-rose-100 my-8">
             <h2 className="text-3xl font-bold mb-2 text-teal-400">{t.bravo}</h2>
-            
-            {/* BOUTON D'ARRÊT DE LA MUSIQUE */}
             {isPlayingMusic && (
-              <button onClick={stopAudio} className="mb-4 mx-auto flex items-center justify-center gap-2 bg-rose-100 text-rose-500 px-4 py-2 rounded-full text-sm font-bold animate-pulse hover:bg-rose-200">
-                {t.stopMusic}
-              </button>
+              <button onClick={stopAudio} className="mb-4 mx-auto flex items-center justify-center gap-2 bg-rose-100 text-rose-500 px-4 py-2 rounded-full text-sm font-bold animate-pulse hover:bg-rose-200">{t.stopMusic}</button>
             )}
-
             {isManualEntry && (
               <div className="mb-6 bg-orange-50 p-4 rounded-2xl">
                 <p className="text-sm font-bold text-teal-400 mb-3">{t.when}</p>
