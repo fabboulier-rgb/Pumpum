@@ -18,7 +18,7 @@ const db = getFirestore(app);
 
 const translations = {
   en: {
-    title: "🍼 PumPum", subtitle: "Relax, you got this! 💖", manualBtn: "✍️ Manual Entry",
+    title: "🍼 PumPump", subtitle: "Moms, we Love You! You are the Best! 💖", manualBtn: "✍️ Manual Entry",
     left: "Left", both: "Both", right: "Right", start: "START", stop: "STOP",
     chartTitle: "📊 Weekly Summary (mL)", victories: "🏆 Your victories", noSession: "No session yet. Your turn!",
     bravo: "Great job! 🎉", howMuch: "How much did you pump?", save: "Save", cancel: "Cancel",
@@ -29,11 +29,11 @@ const translations = {
     statusApproved: "Approved ✅", statusTemp: "Temporary ❗",
     statusModalTitle: "Code Status",
     statusModalAppr: "Your code is registered. Your data is securely backed up in the Cloud.",
-    statusModalTemp: "This code is not in the approved database. Your data will only be saved locally on this phone.",
+    statusModalTemp: "This code is not in the approved database. Your data will only be saved locally on this phone. BE CAREFUL, IT MIGHT BE LOST.",
     stopMusic: "🔇 Stop music"
   },
   fr: {
-    title: "🍼 PumPum", subtitle: "Détends-toi, tu gères ! 💖", manualBtn: "✍️ Saisie Manuelle",
+    title: "🍼 PumPump", subtitle: "Mamans,on vous aime ! Vous êtes les meilleures! 💖", manualBtn: "✍️ Saisie Manuelle",
     left: "Gauche", both: "Les deux", right: "Droite", start: "START", stop: "STOP",
     chartTitle: "📊 Résumé Hebdomadaire (mL)", victories: "🏆 Tes victoires", noSession: "Pas encore de session. À toi !",
     bravo: "Bravo ! 🎉", howMuch: "Combien as-tu récolté ?", save: "Sauvegarder", cancel: "Annuler",
