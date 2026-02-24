@@ -24,7 +24,7 @@ const translations = {
     bravo: "Great job! 🎉", howMuch: "How much did you pump?", save: "Save", cancel: "Cancel",
     reminder: "🔔 Next pump reminder:", none: "None", manualDuration: "Manual",
     langBtn: "🇫🇷 FR", stopwatch: "⏱️ Stopwatch", timer: "⏳ Timer", min: "min", when: "🗓️ When was it?",
-    loginTitle: "Welcome!", loginSub: "Enter your family code to access your diary. Contact the development team to get one. If you don't have one, you can create your own, but data won't be saved on the cloud:", loginBtn: "Unlock",
+    loginTitle: "Welcome!", loginSub: "Enter your family code to access your diary", loginBtn: "Unlock",
     loginPlaceholder: "Ex: Baby2026", logout: "🔒",
     statusApproved: "Approved ✅", statusTemp: "Temporary ❗",
     statusModalTitle: "Code Status",
@@ -40,8 +40,8 @@ const translations = {
     bravo: "Bravo ! 🎉", howMuch: "Combien as-tu récolté ?", save: "Sauvegarder", cancel: "Annuler",
     reminder: "🔔 Rappel prochain tirage :", none: "Non", manualDuration: "Manuel",
     langBtn: "🇬🇧 EN", stopwatch: "⏱️ Chrono", timer: "⏳ Timer", min: "min", when: "🗓️ Quand était-ce ?",
-    loginTitle: "Bienvenue !", loginSub: "Entrez votre code familial pour accéder au carnet de suivi. Contactez l'équipe de développement pour en récupérer un. Vous pouvez créer le votre, mais la donnée ne sera pas sauvegardée sur le cloud:", loginBtn: "Déverrouiller",
-    loginPlaceholder: "Ex: Bébé2026", logout: "🔒",
+    loginTitle: "Bienvenue !", loginSub: "Entrez votre code familial pour accéder au carnet", loginBtn: "Déverrouiller",
+    loginPlaceholder: "Ex: lu1", logout: "🔒",
     statusApproved: "Approuvé ✅", statusTemp: "Temporaire ❗",
     statusModalTitle: "Statut du Code",
     statusModalAppr: "Votre code est enregistré. Vos données sont sauvegardées de manière sécurisée dans le Cloud.",
@@ -73,6 +73,7 @@ export default function App() {
   const [timerTarget, setTimerTarget] = useState(20); 
   
   const [showModal, setShowModal] = useState(false);
+  // Le volume est maintenant synchronisé entre le slider et l'input texte
   const [volume, setVolume] = useState(100);
   const [history, setHistory] = useState([]);
   const [reminderHours, setReminderHours] = useState(0);
@@ -239,6 +240,9 @@ export default function App() {
     stopAudio(); 
     let sessionDate = (isManualEntry && manualDate && manualTime) ? new Date(`${manualDate}T${manualTime}`) : new Date();
     const durationSaved = seconds > 0 && !isManualEntry ? formatTime(seconds, true) : t.manualDuration;
+    
+    // Sécurité : au cas où l'utilisateur efface tout dans le champ texte
+    const finalVolume = volume || 0;
 
     const newSession = {
       id: Date.now(),
@@ -247,7 +251,7 @@ export default function App() {
       timeStr: sessionDate.toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
       duration: durationSaved,
       side,
-      volume
+      volume: finalVolume
     };
     
     const newHistory = [newSession, ...history].sort((a, b) => b.timestamp - a.timestamp);
@@ -309,7 +313,6 @@ export default function App() {
             <button type="submit" className="w-full py-4 bg-rose-300 hover:bg-rose-400 text-white rounded-2xl font-extrabold text-lg shadow-md active:scale-95 transition-all">{t.loginBtn}</button>
           </form>
 
-          {/* SÉLECTEUR JOUR/NUIT CENTRÉ EN BAS (Écran Login) */}
           <div className="mt-8 flex justify-center w-full">
             <div className="flex bg-orange-50 dark:bg-slate-800 p-1 rounded-full shadow-inner">
               <button onClick={() => { if (darkMode) toggleDarkMode(); }} className={`px-4 py-2 rounded-full text-lg transition-all ${!darkMode ? 'bg-white shadow-sm' : 'opacity-40'}`}>☀️</button>
@@ -407,18 +410,8 @@ export default function App() {
       {/* SÉLECTEUR JOUR/NUIT CENTRÉ EN BAS */}
       <div className="mt-auto mb-6 flex justify-center w-full max-w-sm">
         <div className="flex bg-white dark:bg-slate-900 p-1 rounded-full shadow-sm border border-rose-50 dark:border-slate-800">
-          <button 
-            onClick={() => { if (darkMode) toggleDarkMode(); }} 
-            className={`px-6 py-2 rounded-full text-xl transition-all ${!darkMode ? 'bg-orange-50 shadow-md' : 'opacity-40 hover:bg-slate-800'}`}
-          >
-            ☀️
-          </button>
-          <button 
-            onClick={() => { if (!darkMode) toggleDarkMode(); }} 
-            className={`px-6 py-2 rounded-full text-xl transition-all ${darkMode ? 'bg-indigo-900 shadow-md' : 'opacity-40 hover:bg-orange-50'}`}
-          >
-            🌙
-          </button>
+          <button onClick={() => { if (darkMode) toggleDarkMode(); }} className={`px-6 py-2 rounded-full text-xl transition-all ${!darkMode ? 'bg-orange-50 shadow-md' : 'opacity-40 hover:bg-slate-800'}`}>☀️</button>
+          <button onClick={() => { if (!darkMode) toggleDarkMode(); }} className={`px-6 py-2 rounded-full text-xl transition-all ${darkMode ? 'bg-indigo-900 shadow-md' : 'opacity-40 hover:bg-orange-50'}`}>🌙</button>
         </div>
       </div>
 
@@ -435,6 +428,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODALE DE SAUVEGARDE MODIFIÉE (Saisie manuelle du chiffre) */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2rem] w-full max-w-sm text-center shadow-2xl border-4 border-rose-100 dark:border-slate-800 my-8 transition-colors">
@@ -452,8 +446,21 @@ export default function App() {
               </div>
             )}
             <p className="mb-4 text-slate-500 dark:text-slate-400 font-medium">{t.howMuch}</p>
-            <span className="text-6xl font-black text-slate-700 dark:text-slate-200 mb-2 block">{volume} <span className="text-2xl text-rose-300">mL</span></span>
+            
+            {/* NOUVELLE ZONE DE SAISIE HYBRIDE */}
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <input 
+                type="number" 
+                value={volume === 0 ? '' : volume} 
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="text-6xl font-black text-slate-700 dark:text-slate-200 bg-transparent w-32 text-center border-b-4 border-dashed border-rose-200 dark:border-slate-700 focus:outline-none focus:border-rose-400 dark:focus:border-rose-500 transition-colors"
+                placeholder="0"
+              />
+              <span className="text-2xl text-rose-300 font-bold mt-4">mL</span>
+            </div>
+            
             <input type="range" min="0" max="300" step="10" value={volume} onChange={(e) => setVolume(Number(e.target.value))} className="w-full accent-rose-300 mb-6 h-3 bg-orange-50 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer"/>
+            
             <div className="mb-8 bg-orange-50 dark:bg-slate-800 p-4 rounded-2xl">
               <p className="text-sm font-bold text-teal-400 mb-3">{t.reminder}</p>
               <div className="flex gap-2 justify-center">
